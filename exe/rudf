@@ -1,0 +1,95 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "rudf"
+
+# A small command-line front-end, in the spirit of PyMuPDF's `pymupdf` tool.
+#
+#   rudf info  FILE          print page count and metadata
+#   rudf text  FILE [PAGE]   print extracted text (all pages, or one page)
+#   rudf pages FILE          print each page's index, size and rotation
+module RUDF
+  class CLI
+    def self.run(argv)
+      new.run(argv)
+    end
+
+    def run(argv)
+      command = argv.shift
+      case command
+      when "info"  then info(argv)
+      when "text"  then text(argv)
+      when "pages" then pages(argv)
+      when "--version", "-v" then puts RUDF::VERSION
+      when nil, "help", "--help", "-h" then usage
+      else
+        warn "unknown command: #{command}"
+        usage
+        exit 1
+      end
+    rescue RUDF::Error => e
+      warn "error: #{e.message}"
+      exit 1
+    end
+
+    private
+
+    def info(argv)
+      path = require_path(argv)
+      RUDF.open(path) do |doc|
+        puts "file:  #{path}"
+        puts "pages: #{doc.page_count}"
+        doc.metadata.each do |key, value|
+          puts format("%-13s %s", "#{key}:", value) if value
+        end
+      end
+    end
+
+    def text(argv)
+      path = require_path(argv)
+      page_arg = argv.shift
+      RUDF.open(path) do |doc|
+        if page_arg
+          puts doc[page_arg.to_i].get_text
+        else
+          doc.each_page.with_index do |page, i|
+            puts "===== page #{i} ====="
+            puts page.get_text
+          end
+        end
+      end
+    end
+
+    def pages(argv)
+      path = require_path(argv)
+      RUDF.open(path) do |doc|
+        doc.each_page do |page|
+          puts format("page %-3d  %-22s  rotation=%d", page.number, page.rect, page.rotation)
+        end
+      end
+    end
+
+    def require_path(argv)
+      path = argv.shift
+      unless path
+        warn "error: missing FILE argument"
+        exit 1
+      end
+      path
+    end
+
+    def usage
+      puts <<~USAGE
+        rudf #{RUDF::VERSION} — inspect PDF files (a Ruby port of PyMuPDF)
+
+        Usage:
+          rudf info  FILE          print page count and metadata
+          rudf text  FILE [PAGE]   print extracted text (all pages, or one page)
+          rudf pages FILE          print each page's index, size and rotation
+          rudf --version           print the version
+      USAGE
+    end
+  end
+end
+
+RUDF::CLI.run(ARGV)
