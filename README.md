@@ -15,11 +15,21 @@ PDF parser — **no native extensions and no runtime dependencies**.
 ## Features
 
 - Open PDFs from a file path or an in-memory byte string.
+- **Transparent decryption** of encrypted documents (empty user password):
+  RC4, AES-128 and AES-256.
 - Read document metadata (title, author, producer, dates, …).
 - Enumerate pages; the document is `Enumerable`.
 - Inspect page geometry: media box, crop box, rotation, and the
   rotation-aware page rectangle.
-- Extract visible text from page content streams.
+- **Font-aware text extraction** with `/ToUnicode` CMaps and `/Encoding`
+  handling, in `text`, `words`, `blocks` and `dict` modes (with bounding
+  boxes, top-left origin like PyMuPDF).
+- **Navigation**: table of contents (`get_toc`), links (`get_links`) and
+  annotations (`annots`).
+- **Image extraction**: list page images and export them (JPEG passthrough or
+  synthesised PNG).
+- **Optional native rendering** (`get_pixmap`) via a MuPDF FFI backend, loaded
+  only if present — the core stays dependency-free.
 - A robust parser that handles classic cross-reference tables, cross-reference
   **streams**, and **object streams** (PDF 1.5+), plus `FlateDecode`,
   `ASCIIHexDecode` and `ASCII85Decode` filters.
@@ -105,7 +115,13 @@ r.transform(RUDF::Matrix.scale(2, 2)).round    # => IRect(0, 0, 200, 100)
 | `page.rect` / `page.bound()`    | `page.rect` / `page.bound`            |
 | `page.mediabox`                 | `page.mediabox`                       |
 | `page.rotation`                 | `page.rotation`                       |
-| `page.get_text()`               | `page.get_text`                       |
+| `page.get_text(mode)`           | `page.get_text(mode)` (`text`/`words`/`blocks`/`dict`) |
+| `doc.get_toc()`                 | `doc.get_toc`                         |
+| `page.get_links()`              | `page.get_links` / `page.links`       |
+| `page.annots()`                 | `page.annots`                         |
+| `page.get_images()`             | `page.get_images`                     |
+| `doc.extract_image(xref)`       | `doc.extract_image(xref)`             |
+| `page.get_pixmap()`             | `page.get_pixmap` (optional backend)  |
 | `fitz.Point`, `fitz.Matrix`, …  | `RUDF::Point`, `RUDF::Matrix`, …       |
 | `fitz.Identity`                 | `RUDF::IDENTITY`                      |
 
@@ -116,22 +132,46 @@ r.transform(RUDF::Matrix.scale(2, 2)).round    # => IRect(0, 0, 200, 100)
   index, then expands any object streams it finds. This tolerates damaged
   xref sections and handles both classic and PDF 1.5+ compressed layouts
   uniformly.
-- **Text extraction.** `get_text` interprets the text-showing operators
-  (`Tj`, `TJ`, `'`, `"`) and the positioning operators (`Td`, `TD`, `T*`) to
-  recover text with reasonable line structure. Bytes are decoded as
-  Latin-1/PDFDoc text, which is correct for the common case of standard fonts;
-  full font/CMap-driven decoding is on the roadmap.
+- **Text extraction.** A `TextPage` interpreter tracks the PDF text and
+  graphics state (text/line matrices, font, spacing, the CTM) to place each
+  glyph, then groups glyphs into words, lines and blocks. Character codes are
+  decoded through the font's `/ToUnicode` CMap when present, falling back to
+  its `/Encoding` (WinAnsi/MacRoman + `/Differences`); Type0/Identity-H
+  composite fonts are supported. All `get_text` modes derive from this single
+  structure, as in PyMuPDF.
+- **Decryption.** The standard security handler derives the file key from the
+  `/Encrypt` dictionary and decrypts strings and streams per object as they
+  are parsed, so encrypted documents open transparently.
+
+## Page rendering (optional)
+
+Rendering a page to a raster needs a native engine, so it is opt-in. If the
+[`ffi`](https://rubygems.org/gems/ffi) gem and the MuPDF shared library are
+both present, `get_pixmap` works; otherwise it raises
+`RUDF::RenderingUnavailableError` and the rest of the library is unaffected.
+
+```ruby
+if RUDF::Render.available?
+  RUDF.open("report.pdf") do |doc|
+    pix = doc[0].get_pixmap(dpi: 150)   # => RUDF::Pixmap
+    pix.save("page0.png")
+  end
+end
+```
+
+Set `RUDF_MUPDF_VERSION` if your installed MuPDF reports a version other than
+the default the backend expects.
 
 ## Roadmap
 
-Contributions welcome. Planned, in rough priority order:
+The original roadmap (font-aware text, encryption, navigation, image
+extraction, optional rendering) is now implemented. Contributions welcome for:
 
-- Font/CMap-aware text decoding and `"dict"`/`"words"`/`"blocks"` extraction
-  modes.
-- Encrypted-document support (RC4/AES).
-- Links, annotations, and the document outline (table of contents).
-- Image extraction.
-- Optional native rendering via MuPDF FFI bindings for `get_pixmap`.
+- `rawdict`/`html`/`xml` text output and better word/line segmentation.
+- Public-key and password-protected encryption (non-empty user passwords).
+- Writing/editing PDFs (currently read-only).
+- A pure-Ruby rasteriser so `get_pixmap` needs no native library.
+- CCITT/JBIG2 image decoding (currently passed through).
 
 ## Development
 

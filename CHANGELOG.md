@@ -25,6 +25,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Image extraction: `Page#get_images` lists image XObjects (recursing into
   form XObjects); `Document#extract_image` returns JPEG/JPEG2000 passthrough
   or a PNG synthesised from raw samples (CMYK and indexed colour → RGB).
+- Optional native page rendering: `Page#get_pixmap` returns a `Pixmap` via a
+  lazily-loaded MuPDF FFI backend. The pure-Ruby core needs no native
+  dependency; when none is present a clear `RenderingUnavailableError` is
+  raised. `Pixmap` (pure Ruby) reads pixels and encodes/saves PNG, and
+  `RUDF::Render.available?` reports capability.
 
 ## [0.1.0] - 2026-07-30
 

@@ -2,6 +2,8 @@
 
 require_relative "pdf/text_page"
 require_relative "pdf/image"
+require_relative "pixmap"
+require_relative "render"
 
 module RUDF
   # A single page of a {Document}, mirroring the surface of +fitz.Page+.
@@ -148,6 +150,30 @@ module RUDF
     end
     alias annotations annots
     alias get_annots annots
+
+    # Render the page to a {Pixmap}, mirroring +fitz.Page.get_pixmap+.
+    #
+    # Requires an optional native backend (MuPDF via FFI). When none is
+    # available this raises {RenderingUnavailableError} — the rest of the
+    # library works without it. Check {RUDF::Render.available?} first if you
+    # want to branch on capability.
+    #
+    # @param matrix [Matrix] transform to apply (overrides +dpi+)
+    # @param dpi [Integer] target resolution; +zoom = dpi / 72+
+    # @param colorspace [String] "rgb" (default) or "gray"
+    # @param alpha [Boolean] include an alpha channel
+    def get_pixmap(matrix: nil, dpi: nil, colorspace: "rgb", alpha: false)
+      transform = matrix || (dpi ? Matrix.scale(dpi / 72.0, dpi / 72.0) : IDENTITY)
+      gray = colorspace.to_s.downcase.start_with?("g")
+      Render.render(
+        data: @document.raw_data,
+        number: @number,
+        matrix: transform,
+        alpha: alpha,
+        gray: gray
+      )
+    end
+    alias pixmap get_pixmap
 
     # List the images used on the page, mirroring +fitz.Page.get_images+.
     #

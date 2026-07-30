@@ -21,4 +21,8 @@ module RUDF
 
   # Raised when a document is encrypted and cannot be read without a password.
   class EncryptedError < Error; end
+
+  # Raised by {Page#get_pixmap} when no native rendering backend is available.
+  # The pure-Ruby core never requires one; rendering is opt-in.
+  class RenderingUnavailableError < Error; end
 end

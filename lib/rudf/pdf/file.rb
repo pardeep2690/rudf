@@ -19,6 +19,11 @@ module RUDF
 
       attr_reader :version
 
+      # The raw file bytes (used by the optional rendering backend).
+      def raw_bytes
+        @data
+      end
+
       def initialize(data)
         @data = data.b # treat as binary
         @cache = {}

@@ -53,6 +53,12 @@ module RUDF
       @pdf
     end
 
+    # The raw PDF bytes backing this document (used by the render backend).
+    def raw_data
+      ensure_open
+      @pdf.raw_bytes
+    end
+
     # Number of pages in the document.
     def page_count
       pages.length

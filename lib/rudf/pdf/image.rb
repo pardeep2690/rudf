@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "zlib"
+require_relative "png"
 
 module RUDF
   module PDF
@@ -101,15 +102,13 @@ module RUDF
         label = @colorspace_name
 
         if label == "Indexed"
-          rgb = expand_indexed(samples)
-          write_png(@width, @height, 2, 8, rgb)
+          PNG.encode(@width, @height, expand_indexed(samples), color_type: PNG::COLOR_RGB, bit_depth: 8)
         elsif label == "DeviceCMYK"
-          rgb = cmyk_to_rgb(samples)
-          write_png(@width, @height, 2, 8, rgb)
+          PNG.encode(@width, @height, cmyk_to_rgb(samples), color_type: PNG::COLOR_RGB, bit_depth: 8)
         elsif label == "DeviceRGB"
-          write_png(@width, @height, 2, @bpc, samples)
+          PNG.encode(@width, @height, samples, color_type: PNG::COLOR_RGB, bit_depth: @bpc)
         else # DeviceGray (or unknown single-channel)
-          write_png(@width, @height, 0, @bpc, samples)
+          PNG.encode(@width, @height, samples, color_type: PNG::COLOR_GRAY, bit_depth: @bpc)
         end
       rescue ParseError, Zlib::Error
         # Unsupported compression (e.g. CCITT/LZW) — hand back raw payload.
@@ -170,31 +169,6 @@ module RUDF
         g = (255 - m) * (255 - k) / 255
         b = (255 - y) * (255 - k) / 255
         [r, g, b].pack("C3")
-      end
-
-      def write_png(width, height, color_type, bit_depth, pixel_data)
-        row_bytes = row_length(width, color_type, bit_depth)
-        raw = +"".b
-        height.times do |y|
-          raw << "\x00".b # filter type 0 (None)
-          raw << (pixel_data.byteslice(y * row_bytes, row_bytes) || ("\x00".b * row_bytes))
-        end
-
-        out = +"\x89PNG\r\n\x1A\n".b
-        out << png_chunk("IHDR", [width, height].pack("N2") + [bit_depth, color_type, 0, 0, 0].pack("C5"))
-        out << png_chunk("IDAT", Zlib::Deflate.deflate(raw))
-        out << png_chunk("IEND", "".b)
-        out
-      end
-
-      def row_length(width, color_type, bit_depth)
-        channels = color_type == 2 ? 3 : 1
-        ((width * channels * bit_depth) + 7) / 8
-      end
-
-      def png_chunk(type, data)
-        body = type.b + data.b
-        [data.bytesize].pack("N") + body + [Zlib.crc32(body)].pack("N")
       end
 
       # ---- helpers -----------------------------------------------------------
