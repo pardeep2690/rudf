@@ -22,6 +22,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Document navigation: `Document#get_toc` builds the table of contents from
   the outline tree (with named/explicit destination resolution); `Page#links`
   returns GoTo/URI/remote links; `Page#annots` returns `Annotation` objects.
+- Image extraction: `Page#get_images` lists image XObjects (recursing into
+  form XObjects); `Document#extract_image` returns JPEG/JPEG2000 passthrough
+  or a PNG synthesised from raw samples (CMYK and indexed colour → RGB).
 
 ## [0.1.0] - 2026-07-30
 

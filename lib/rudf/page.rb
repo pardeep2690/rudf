@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "pdf/text_page"
+require_relative "pdf/image"
 
 module RUDF
   # A single page of a {Document}, mirroring the surface of +fitz.Page+.
@@ -148,12 +149,51 @@ module RUDF
     alias annotations annots
     alias get_annots annots
 
+    # List the images used on the page, mirroring +fitz.Page.get_images+.
+    #
+    # Each entry is a Hash with +:xref+ (the image's object number, for
+    # {Document#extract_image}), +:name+, and +:width+/+:height+/+:bpc+/
+    # +:colorspace+/+:filter+. Images referenced through nested form XObjects
+    # are included.
+    def get_images
+      images = []
+      collect_xobject_images(@dict["Resources"], images, {})
+      images
+    end
+    alias images get_images
+
     def to_s
       "Page(number=#{@number}, rect=#{rect})"
     end
     alias inspect to_s
 
     private
+
+    def collect_xobject_images(resources, images, seen)
+      resources = @document.pdf.resolve(resources)
+      return unless resources.is_a?(Hash)
+
+      xobjects = @document.pdf.resolve(resources["XObject"])
+      return unless xobjects.is_a?(Hash)
+
+      xobjects.each do |name, ref|
+        xref = ref.is_a?(PDF::Reference) ? ref.number : nil
+        next if xref && seen[xref]
+
+        seen[xref] = true if xref
+        obj = @document.pdf.resolve(ref)
+        next unless obj.is_a?(PDF::Stream)
+
+        subtype = @document.pdf.resolve(obj.dict["Subtype"])
+        sname = subtype.is_a?(PDF::Name) ? subtype.value : nil
+        if sname == "Image"
+          info = PDF::Image.new(obj, @document.pdf.method(:resolve)).info
+          images << info.merge(xref: xref, name: name)
+        elsif sname == "Form"
+          collect_xobject_images(obj.dict["Resources"], images, seen)
+        end
+      end
+    end
 
     def annotation_dicts
       annots = @document.pdf.resolve(@dict["Annots"])

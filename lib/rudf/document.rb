@@ -117,6 +117,20 @@ module RUDF
       }
     end
 
+    # Extract the image stored in object +xref+, mirroring
+    # +fitz.Document.extract_image+.
+    #
+    # Returns +{ ext:, image:, width:, height:, colorspace:, bpc: }+ where
+    # +image+ is the bytes of a standalone image file (JPEG passthrough, or a
+    # PNG synthesised from raw samples). Raises for a non-image object.
+    def extract_image(xref)
+      ensure_open
+      stream = @pdf.object(xref)
+      raise Error, "object #{xref} is not an image stream" unless stream.is_a?(PDF::Stream)
+
+      PDF::Image.new(stream, @pdf.method(:resolve)).extract
+    end
+
     # Close the document and release parsed data.
     def close
       @closed = true

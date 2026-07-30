@@ -70,6 +70,35 @@ module PDFBuilder
     str.gsub("\\", "\\\\\\\\").gsub("(", "\\(").gsub(")", "\\)")
   end
 
+  # RGB samples for the 2x2 image embedded by +image_doc+:
+  # red, green / blue, white.
+  IMAGE_RGB = [255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255].pack("C*").freeze
+  # Arbitrary bytes standing in for a JPEG payload (DCTDecode passthrough).
+  FAKE_JPEG = "\xFF\xD8\xFF\xE0FAKEJPEGDATA\xFF\xD9".b.freeze
+
+  # A one-page PDF embedding a 2x2 FlateDecode RGB image (object 6) and a
+  # DCTDecode "JPEG" image (object 7).
+  def image_doc
+    require "zlib"
+    flate = Zlib::Deflate.deflate(IMAGE_RGB)
+    content = "q 100 0 0 100 50 600 cm /Im0 Do Q"
+
+    objects = {
+      1 => "<< /Type /Catalog /Pages 2 0 R >>",
+      2 => "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      3 => "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 800] /Contents 5 0 R " \
+           "/Resources << /XObject << /Im0 6 0 R /Im1 7 0 R >> >> >>",
+      5 => "<< /Length #{content.bytesize} >>\nstream\n#{content}\nendstream",
+      6 => "<< /Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB " \
+           "/BitsPerComponent 8 /Filter /FlateDecode /Length #{flate.bytesize} >>\n" \
+           "stream\n#{flate}\nendstream",
+      7 => "<< /Type /XObject /Subtype /Image /Width 4 /Height 1 /ColorSpace /DeviceRGB " \
+           "/BitsPerComponent 8 /Filter /DCTDecode /Length #{FAKE_JPEG.bytesize} >>\n" \
+           "stream\n#{FAKE_JPEG}\nendstream"
+    }
+    assemble_numbered(objects)
+  end
+
   # Assemble a Hash of {object_number => body} (bodies without the
   # "N 0 obj/endobj" wrapper) into a complete PDF. Missing numbers become free
   # xref entries. +trailer_extra+ is appended inside the trailer dictionary.
