@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "native"
 require_relative "render/mupdf"
 
 module RUDF
@@ -11,19 +12,27 @@ module RUDF
   module Render
     module_function
 
-    # True when a native rendering backend is usable in this environment.
+    # True when any native rendering backend is usable in this environment.
+    # The compiled MuPDF extension is preferred; the FFI backend is a fallback
+    # for when only a system libmupdf (and the +ffi+ gem) is present.
     def available?
-      MuPDF.available?
+      Native.available? || MuPDF.available?
     end
 
     # Render +number+ (0-based) of the document bytes +data+ using +matrix+.
     def render(data:, number:, matrix:, alpha: false, gray: false)
-      MuPDF.render(data: data, number: number, matrix: matrix, alpha: alpha, gray: gray)
+      if Native.available?
+        Native.render(data: data, number: number, matrix: matrix, alpha: alpha, gray: gray)
+      elsif MuPDF.available?
+        MuPDF.render(data: data, number: number, matrix: matrix, alpha: alpha, gray: gray)
+      else
+        raise RenderingUnavailableError, unavailable_reason
+      end
     end
 
     # Human-readable explanation of why rendering is unavailable.
     def unavailable_reason
-      MuPDF.install_hint
+      Native.reason || MuPDF.install_hint
     end
   end
 end

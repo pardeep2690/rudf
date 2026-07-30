@@ -221,24 +221,65 @@ writing (no embedding yet); text is WinAnsi-encoded; editing an **encrypted**
 document is refused. Multi-line text wraps to the box width and each line is
 aligned independently.
 
-## Page rendering (optional)
+## Native backend (full MuPDF power)
 
-Rendering a page to a raster needs a native engine, so it is opt-in. If the
-[`ffi`](https://rubygems.org/gems/ffi) gem and the MuPDF shared library are
-both present, `get_pixmap` works; otherwise it raises
-`RUDF::RenderingUnavailableError` and the rest of the library is unaffected.
+RUDF has two layers:
+
+1. A **pure-Ruby core** (everything above) with **no dependencies** — it
+   installs and runs anywhere `gem install rudf` runs.
+2. An **optional native backend** that binds the real
+   [MuPDF](https://mupdf.com/) engine for full-fidelity rendering and text
+   extraction — the same engine PyMuPDF wraps.
+
+`gem install rudf` **always succeeds**: if MuPDF is not available at build
+time, the extension quietly compiles to nothing and you get the pure-Ruby
+core. Native features then raise a clear `RUDF::RenderingUnavailableError`
+until the backend is present.
+
+### Getting the native backend
+
+- **Precompiled gems (easiest).** Released platform gems bundle the compiled
+  extension, so `gem install rudf` gives you native rendering with nothing
+  else to install. (These are produced by the project's CI — see
+  `.github/workflows/native.yml`.)
+- **Build against system MuPDF.** Install MuPDF, then (re)install the gem:
+
+  ```sh
+  # Debian/Ubuntu
+  sudo apt-get install libmupdf-dev mupdf-tools
+  # macOS
+  brew install mupdf
+
+  gem install rudf                      # extension compiles automatically
+  # custom location:
+  gem install rudf -- --with-mupdf-dir=/opt/mupdf
+  ```
+
+### Using it
 
 ```ruby
+RUDF::Render.available?      # => true when a native backend is active
+RUDF::Native.mupdf_version   # => e.g. "1.24.0", or nil
+
 if RUDF::Render.available?
   RUDF.open("report.pdf") do |doc|
-    pix = doc[0].get_pixmap(dpi: 150)   # => RUDF::Pixmap
+    pix = doc[0].get_pixmap(dpi: 150)   # => RUDF::Pixmap (rendered by MuPDF)
     pix.save("page0.png")
   end
 end
 ```
 
-Set `RUDF_MUPDF_VERSION` if your installed MuPDF reports a version other than
-the default the backend expects.
+The C extension (`ext/rudf_native`) wraps every MuPDF call in `fz_try`/
+`fz_catch` so C-level errors become Ruby exceptions instead of crashing the VM
+— the reason a compiled shim is required rather than raw FFI. A secondary FFI
+backend (`RUDF::Render::MuPDF`) can also drive a system `libmupdf` without the
+compiled extension; set `RUDF_MUPDF_VERSION` if your MuPDF reports an
+unexpected version.
+
+> **License note.** The pure-Ruby core is MIT. MuPDF is distributed under the
+> **GNU AGPL / a commercial license**, so any build that includes the native
+> backend (including precompiled gems that bundle MuPDF) is subject to those
+> terms. Use the pure-Ruby core if you need a permissively-licensed dependency.
 
 ## Roadmap
 

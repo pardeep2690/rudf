@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Optional native MuPDF backend (`ext/rudf_native`): a C extension that wraps
+  MuPDF with `fz_try`/`fz_catch` guards for full-fidelity rendering and text.
+  `extconf.rb` degrades to a no-op build when MuPDF is absent, so
+  `gem install rudf` always succeeds pure-Ruby; precompiled platform gems (CI
+  workflow included) bundle the engine. `RUDF::Native.available?` /
+  `RUDF::Render.available?` report status; `RUDF::Render` prefers the native
+  backend and falls back to the FFI one. (MuPDF is AGPL/commercial — builds
+  including the backend inherit that license.)
 - Write support: `RUDF::Writer` builds new PDFs and draws text
   (`insert_text`, `insert_textbox` with horizontal alignment and vertical
   centering within a box). `Document#insert_text`/`#insert_textbox` +

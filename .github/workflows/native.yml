@@ -1,0 +1,52 @@
+name: Native backend
+
+# Builds and tests the optional MuPDF C extension on real machines (it cannot
+# be built in the sandbox where the code is authored), and produces the
+# precompiled platform gems that make `gem install rudf` work with no system
+# MuPDF required.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # 1) Compile against a system MuPDF and run the suite with the native backend
+  #    active, so the C shim is exercised end to end.
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+      - name: Install MuPDF
+        run: sudo apt-get update && sudo apt-get install -y libmupdf-dev mupdf-tools zlib1g-dev
+      - name: Compile the extension
+        run: bundle exec rake compile
+      - name: Run tests (native backend enabled)
+        run: bundle exec rspec
+
+  # 2) Cross-compile precompiled gems for every supported platform using
+  #    rake-compiler-dock, then upload them as build artifacts.
+  precompiled-gems:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+      - name: Build native gems for all platforms
+        run: |
+          gem install rake-compiler-dock
+          bundle exec rake-compiler-dock bash -c "\
+            bundle install && \
+            RUBY_CC_VERSION=3.3.0:3.2.0:3.1.0 bundle exec rake cross native gem"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: precompiled-gems
+          path: pkg/*.gem

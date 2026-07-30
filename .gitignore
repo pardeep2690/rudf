@@ -8,3 +8,12 @@
 *.gem
 Gemfile.lock
 .rspec_status
+
+# Compiled native extension artifacts
+*.o
+*.so
+*.bundle
+*.dll
+ext/**/Makefile
+ext/**/mkmf.log
+lib/rudf/rudf_native.*
