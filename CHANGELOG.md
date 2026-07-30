@@ -19,6 +19,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Transparent decryption of encrypted documents (empty user password) via the
   standard security handler: RC4 (V1/V2), AES-128 (V4/AESV2) and AES-256
   (V5/AESV3, revisions 5 and 6). `Document#encrypted?` reports the state.
+- Document navigation: `Document#get_toc` builds the table of contents from
+  the outline tree (with named/explicit destination resolution); `Page#links`
+  returns GoTo/URI/remote links; `Page#annots` returns `Annotation` objects.
 
 ## [0.1.0] - 2026-07-30
 

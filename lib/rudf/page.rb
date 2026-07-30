@@ -114,9 +114,89 @@ module RUDF
       end.join("\n")
     end
 
+    # Link annotations on the page, mirroring +fitz.Page.get_links+.
+    #
+    # Each link is a Hash with +:kind+ (+:goto+, +:uri+, +:remote+ or +:none+),
+    # +:from+ (a {Rect} in top-left page coordinates), and, depending on kind,
+    # +:page+ (0-based target index), +:to+ (a {Point}) and +:uri+.
+    def links
+      annotation_dicts.filter_map do |annot|
+        subtype = @document.pdf.resolve(annot["Subtype"])
+        next unless subtype.is_a?(PDF::Name) && subtype.value == "Link"
+
+        dest = link_destination(annot)
+        { from: rect_from_array(annot["Rect"]) }.merge(dest)
+      end
+    end
+    alias get_links links
+
+    # All annotations on the page as {Annotation} objects.
+    def annots
+      annotation_dicts.filter_map do |annot|
+        subtype = @document.pdf.resolve(annot["Subtype"])
+        Annotation.new(
+          type: subtype.is_a?(PDF::Name) ? subtype.value : "Unknown",
+          rect: rect_from_array(annot["Rect"]),
+          info: {
+            content: text_value(annot["Contents"]),
+            title: text_value(annot["T"]),
+            name: name_value(annot["Name"])
+          }
+        )
+      end
+    end
+    alias annotations annots
+    alias get_annots annots
+
     def to_s
       "Page(number=#{@number}, rect=#{rect})"
     end
     alias inspect to_s
+
+    private
+
+    def annotation_dicts
+      annots = @document.pdf.resolve(@dict["Annots"])
+      return [] unless annots.is_a?(Array)
+
+      annots.filter_map do |ref|
+        dict = @document.pdf.resolve(ref)
+        dict if dict.is_a?(Hash)
+      end
+    end
+
+    def link_destination(annot)
+      if annot.key?("Dest")
+        @document.resolve_destination(annot["Dest"])
+      elsif annot.key?("A")
+        @document.send(:resolve_action, @document.pdf.resolve(annot["A"]))
+      else
+        { kind: :none, page: nil, to: nil, uri: nil }
+      end
+    end
+
+    # Convert a PDF +[x0 y0 x1 y1]+ rectangle (bottom-left origin) into a
+    # top-left-origin {Rect}, matching the text-extraction coordinate system.
+    def rect_from_array(value)
+      arr = @document.pdf.resolve(value)
+      return Rect.new(0, 0, 0, 0) unless arr.is_a?(Array) && arr.length == 4
+
+      coords = arr.map { |v| @document.pdf.resolve(v).to_f }
+      r = Rect.new(*coords).normalize
+      h = mediabox.height
+      Rect.new(r.x0, h - r.y1, r.x1, h - r.y0)
+    end
+
+    def text_value(value)
+      str = @document.pdf.resolve(value)
+      return nil unless str.is_a?(String)
+
+      @document.send(:decode_text_string, str)
+    end
+
+    def name_value(value)
+      v = @document.pdf.resolve(value)
+      v.is_a?(PDF::Name) ? v.value : nil
+    end
   end
 end

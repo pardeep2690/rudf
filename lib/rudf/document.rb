@@ -2,6 +2,8 @@
 
 require_relative "pdf/file"
 require_relative "page"
+require_relative "outline"
+require_relative "annotation"
 
 module RUDF
   # A PDF document, the entry point of the library and a port of
@@ -17,6 +19,7 @@ module RUDF
   # form ({RUDF.open}) that closes them automatically.
   class Document
     include Enumerable
+    include Outline
 
     # Inheritable attributes propagated down the page tree per the PDF spec.
     INHERITABLE = %w[MediaBox CropBox Rotate Resources].freeze
@@ -142,14 +145,16 @@ module RUDF
         catalog = @pdf.catalog
         raise FileDataError, "no document catalog found" unless catalog.is_a?(Hash)
 
-        root = @pdf.resolve(catalog["Pages"])
+        root_ref = catalog["Pages"]
+        root = @pdf.resolve(root_ref)
         collected = []
-        walk_pages(root, {}, collected, {}) if root.is_a?(Hash)
+        @page_refs = [] # parallel array: leaf page object numbers
+        walk_pages(root, ref_number(root_ref), {}, collected, {}) if root.is_a?(Hash)
         collected
       end
     end
 
-    def walk_pages(node, inherited, collected, seen)
+    def walk_pages(node, node_number, inherited, collected, seen)
       return unless node.is_a?(Hash)
 
       type = node["Type"]
@@ -166,13 +171,17 @@ module RUDF
           next if seen[key]
 
           seen[key] = true
-          walk_pages(@pdf.resolve(kid_ref), merged, collected, seen)
+          walk_pages(@pdf.resolve(kid_ref), ref_number(kid_ref), merged, collected, seen)
         end
       else
         # Leaf page node (Type /Page, or untyped leaf).
-        page_dict = merged.merge(node)
-        collected << page_dict
+        collected << merged.merge(node)
+        @page_refs << node_number
       end
+    end
+
+    def ref_number(ref)
+      ref.is_a?(PDF::Reference) ? ref.number : nil
     end
 
     def info_string(info, key)
