@@ -4,6 +4,7 @@ require_relative "pdf/file"
 require_relative "page"
 require_relative "outline"
 require_relative "annotation"
+require_relative "editing"
 
 module RUDF
   # A PDF document, the entry point of the library and a port of
@@ -20,6 +21,7 @@ module RUDF
   class Document
     include Enumerable
     include Outline
+    include Editing
 
     # Inheritable attributes propagated down the page tree per the PDF spec.
     INHERITABLE = %w[MediaBox CropBox Rotate Resources].freeze

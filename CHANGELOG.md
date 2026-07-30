@@ -8,6 +8,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Write support: `RUDF::Writer` builds new PDFs and draws text
+  (`insert_text`, `insert_textbox` with horizontal alignment and vertical
+  centering within a box). `Document#insert_text`/`#insert_textbox` +
+  `Document#save` stamp text onto existing pages via an incremental update.
+- Standard-14 font metrics (`PDF::StandardFont`) for measuring text, used by
+  the writer for alignment/centering and by the reader as a `/Widths`
+  fallback so positioning is accurate for non-embedded base fonts.
+- Bold text via the `Helvetica-Bold` base font (and PyMuPDF-style aliases
+  such as `hebo`).
+
+### Earlier in this cycle
+
 - Font-aware text extraction: `/ToUnicode` CMap decoding, `/Encoding`
   (WinAnsi/MacRoman) with `/Differences`, and Type0/Identity-H composite
   fonts.

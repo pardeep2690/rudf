@@ -14,6 +14,9 @@ require_relative "rudf/geometry/quad"
 require_relative "rudf/document"
 require_relative "rudf/page"
 
+# Write support.
+require_relative "rudf/writer"
+
 # RUDF ("Ruby PDF") is a pure-Ruby port of the PyMuPDF (+fitz+) library.
 #
 # It provides PyMuPDF's document model — {Document}, {Page} and the geometry

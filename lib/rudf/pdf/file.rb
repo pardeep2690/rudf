@@ -88,6 +88,16 @@ module RUDF
         !@encrypt_ref.nil?
       end
 
+      # The highest object number seen in the file (for allocating new ones).
+      def max_object_number
+        (@offsets.keys + @compressed.keys).max || 0
+      end
+
+      # The +/Root+ reference, used when writing an incremental trailer.
+      def root_reference
+        @root_ref
+      end
+
       private
 
       def detect_version

@@ -30,6 +30,9 @@ PDF parser — **no native extensions and no runtime dependencies**.
   synthesised PNG).
 - **Optional native rendering** (`get_pixmap`) via a MuPDF FFI backend, loaded
   only if present — the core stays dependency-free.
+- **Write text**: create new PDFs (`RUDF::Writer`) or stamp text onto existing
+  pages (`Document#insert_textbox` + `save`), with alignment, centering and
+  bold via the standard fonts.
 - A robust parser that handles classic cross-reference tables, cross-reference
   **streams**, and **object streams** (PDF 1.5+), plus `FlateDecode`,
   `ASCIIHexDecode` and `ASCII85Decode` filters.
@@ -143,6 +146,81 @@ r.transform(RUDF::Matrix.scale(2, 2)).round    # => IRect(0, 0, 200, 100)
   `/Encrypt` dictionary and decrypts strings and streams per object as they
   are parsed, so encrypted documents open transparently.
 
+## Writing text
+
+RUDF can create PDFs and stamp text onto existing ones. Text is measured with
+the standard-14 font metrics, so alignment and centering are accurate. Use a
+bold base font (e.g. `Helvetica-Bold`, alias `hebo`) for bold text.
+
+### Bold text centered around a point, within a height band
+
+The key idea: `insert_textbox` centers text **horizontally** inside its box and
+**vertically** within the box's height. So to center around a point `cx` and
+between two heights `top` and `bottom`, make the box symmetric about `cx` and
+span `top..bottom`:
+
+```ruby
+require "rudf"
+
+cx     = 300           # the horizontal center you want the text around
+top    = 150           # top of the height band  (top-left origin, y grows down)
+bottom = 210           # bottom of the height band
+half_w = 250           # half-width of the box (just needs to be wide enough)
+
+writer = RUDF::Writer.new
+page   = writer.add_page(width: 600, height: 800)
+
+page.insert_textbox(
+  [cx - half_w, top, cx + half_w, bottom], # box symmetric about cx, spanning the band
+  "BOLD & CENTERED",
+  fontname: "Helvetica-Bold",              # bold
+  fontsize: 28,
+  align:  :center,                         # horizontal: centered on cx
+  valign: :center                          # vertical: centered in top..bottom
+)
+
+writer.save("centered.pdf")
+```
+
+The text's horizontal center lands on `cx` and its vertical center on
+`(top + bottom) / 2`. Coordinates use a **top-left origin** (y increases
+downward), the same convention as text extraction and links.
+
+### Stamping onto an existing PDF
+
+`Document#insert_textbox` draws onto a page of an already-open document;
+`Document#save` writes an incremental update that appends the new content and
+leaves the original bytes intact.
+
+```ruby
+RUDF.open("invoice.pdf") do |doc|
+  page_h = doc[0].mediabox.height
+  doc.insert_textbox(
+    0,                                   # page index
+    [0, 40, doc[0].mediabox.width, 90],  # full-width band near the top
+    "PAID",
+    fontname: "Helvetica-Bold", fontsize: 32, align: :center, color: [0.8, 0, 0]
+  )
+  doc.save("invoice-stamped.pdf")
+end
+```
+
+### Other helpers
+
+```ruby
+# A single line with its baseline at a point (top-left origin):
+page.insert_text([72, 72], "Header", fontsize: 14, fontname: "hebo")
+
+# Measure a string yourself, e.g. to center manually:
+font = RUDF::PDF::StandardFont.new("Helvetica-Bold")
+w = font.text_width("My title", 24)      # width in points at 24pt
+```
+
+Notes and current limits: only the standard-14 fonts are available for
+writing (no embedding yet); text is WinAnsi-encoded; editing an **encrypted**
+document is refused. Multi-line text wraps to the box width and each line is
+aligned independently.
+
 ## Page rendering (optional)
 
 Rendering a page to a raster needs a native engine, so it is opt-in. If the
@@ -169,7 +247,8 @@ extraction, optional rendering) is now implemented. Contributions welcome for:
 
 - `rawdict`/`html`/`xml` text output and better word/line segmentation.
 - Public-key and password-protected encryption (non-empty user passwords).
-- Writing/editing PDFs (currently read-only).
+- Writing: embedded/custom fonts, shapes and images, and editing existing
+  content (text insertion is implemented).
 - A pure-Ruby rasteriser so `get_pixmap` needs no native library.
 - CCITT/JBIG2 image decoding (currently passed through).
 

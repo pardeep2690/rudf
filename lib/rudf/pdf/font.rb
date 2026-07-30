@@ -2,6 +2,7 @@
 
 require_relative "cmap"
 require_relative "glyph_list"
+require_relative "standard_font"
 
 module RUDF
   module PDF
@@ -26,6 +27,7 @@ module RUDF
         @differences = build_differences
         @base_encoding = base_encoding_name
         build_widths
+        @standard = standard_metrics
       end
 
       # True for Type0 (multi-byte) fonts.
@@ -50,8 +52,16 @@ module RUDF
       end
 
       # Advance width of +code+ in text-space units (glyph units / 1000).
+      #
+      # Falls back to built-in standard-14 metrics when the font omits its
+      # +/Widths+ array (as the base fonts do), so text positioning stays
+      # accurate for the common non-embedded fonts.
       def width(code)
-        (@widths[code] || @default_width).to_f / 1000.0
+        explicit = @widths[code]
+        return explicit.to_f / 1000.0 if explicit
+        return @standard.char_width(code).to_f / 1000.0 if @standard
+
+        @default_width.to_f / 1000.0
       end
 
       # Iterate integer character codes in +bytes+ (1 or 2 bytes each).
@@ -109,6 +119,16 @@ module RUDF
         [code].pack("C").force_encoding(enc).encode(Encoding::UTF_8, invalid: :replace, undef: :replace)
       rescue Encoding::UndefinedConversionError, Encoding::InvalidByteSequenceError
         [code].pack("C").force_encoding(Encoding::ISO_8859_1).encode(Encoding::UTF_8)
+      end
+
+      # A StandardFont for AFM width fallback on simple, non-embedded fonts.
+      def standard_metrics
+        return nil if @composite
+
+        base = res(@dict["BaseFont"])
+        name = base.is_a?(Name) ? base.value : "Helvetica"
+        name = name.sub(/\A[A-Z]{6}\+/, "") # strip subset prefix (e.g. ABCDEF+)
+        StandardFont.new(name)
       end
 
       def build_to_unicode
