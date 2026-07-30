@@ -64,6 +64,13 @@ module RUDF
     end
     alias is_pdf pdf?
 
+    # True if the document was opened from an encrypted file (RUDF transparently
+    # decrypts documents that use an empty user password).
+    def encrypted?
+      pdf.encrypted?
+    end
+    alias needs_pass encrypted?
+
     def closed?
       @closed
     end
@@ -103,7 +110,7 @@ module RUDF
         "producer" => info_string(info, "Producer"),
         "creationDate" => info_string(info, "CreationDate"),
         "modDate" => info_string(info, "ModDate"),
-        "encryption" => nil
+        "encryption" => @pdf.encrypted? ? "Standard" : nil
       }
     end
 

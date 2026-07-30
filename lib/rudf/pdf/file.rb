@@ -4,6 +4,7 @@ require_relative "lexer"
 require_relative "parser"
 require_relative "object"
 require_relative "filters"
+require_relative "crypto"
 
 module RUDF
   module PDF
@@ -23,15 +24,17 @@ module RUDF
         @cache = {}
         @compressed = {} # object number => decoded value (from ObjStm)
         @offsets = {}     # object number => byte offset
-        resolver = method(:resolve)
-        @parser = Parser.new(@data, resolver: resolver)
+        @decryptor = nil
+        @parser = Parser.new(@data, resolver: method(:resolve))
         detect_version
         raise FileDataError, "not a PDF file (missing %PDF header)" unless @version
 
         build_offset_table
-        expand_object_streams
+        # Order matters for encrypted files: find the trailer (and the
+        # unencrypted /Encrypt dict), install decryption, THEN parse content.
         locate_trailer
-        raise EncryptedError, "encrypted PDFs are not supported yet" if encrypted?
+        setup_encryption
+        expand_object_streams
       end
 
       # The document catalog (the +/Root+ object).
@@ -73,6 +76,11 @@ module RUDF
         return nil unless dict.is_a?(Hash)
 
         resolve(dict[key])
+      end
+
+      # True when the document was opened from an encrypted file.
+      def encrypted?
+        !@encrypt_ref.nil?
       end
 
       private
@@ -138,6 +146,7 @@ module RUDF
         @root_ref = nil
         @info_ref = nil
         @encrypt_ref = nil
+        @id_array = nil
 
         collect_classic_trailers
         collect_xref_stream_trailers
@@ -157,12 +166,17 @@ module RUDF
       end
 
       # Cross-reference streams (PDF 1.5+) carry the trailer keys in their dict.
+      # Parsed here without decryption (xref streams are never encrypted) and
+      # not cached, so encrypted content objects are not stored in cleartext.
       def collect_xref_stream_trailers
-        @cache.each_value do |value|
+        @offsets.each_key do |num|
+          value = @parser.parse_indirect_object(@offsets[num])
           next unless value.is_a?(Stream)
 
           type = value.dict["Type"]
           apply_trailer(value.dict) if type.is_a?(Name) && type.value == "XRef"
+        rescue ParseError
+          next
         end
       end
 
@@ -170,10 +184,38 @@ module RUDF
         @root_ref = dict["Root"] if dict["Root"]
         @info_ref = dict["Info"] if dict["Info"]
         @encrypt_ref = dict["Encrypt"] if dict["Encrypt"]
+        @id_array = dict["ID"] if dict["ID"]
       end
 
-      def encrypted?
-        !@encrypt_ref.nil?
+      # Build the decryption handler from the (unencrypted) /Encrypt dict, then
+      # switch the parser over to a decrypting one for all subsequent objects.
+      def setup_encryption
+        return unless @encrypt_ref
+
+        encrypt = parse_ref_without_decryption(@encrypt_ref)
+        raise EncryptedError, "malformed /Encrypt dictionary" unless encrypt.is_a?(Hash)
+
+        filter = encrypt["Filter"]
+        unless filter.is_a?(Name) && filter.value == "Standard"
+          raise EncryptedError, "unsupported security handler: #{filter.inspect}"
+        end
+
+        @crypto = Crypto.new(encrypt, first_file_id, method(:resolve))
+        @decryptor = @crypto.method(:decrypt)
+        @parser = Parser.new(@data, resolver: method(:resolve), decryptor: @decryptor)
+      end
+
+      def parse_ref_without_decryption(ref)
+        return ref unless ref.is_a?(Reference)
+
+        offset = @offsets[ref.number]
+        offset ? @parser.parse_indirect_object(offset) : nil
+      end
+
+      def first_file_id
+        arr = @id_array
+        arr = @parser.parse_indirect_object(@offsets[arr.number]) if arr.is_a?(Reference) && @offsets[arr.number]
+        arr.is_a?(Array) && arr[0].is_a?(String) ? arr[0] : nil
       end
 
       # Fallback used if no trailer/Root was found: look for a /Type /Catalog.

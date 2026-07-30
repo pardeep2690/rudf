@@ -16,6 +16,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - New `Page#get_text` modes: `"words"`, `"blocks"`, and `"dict"`, with
   coordinates using a top-left origin to match PyMuPDF. `Page#text_page`
   exposes the structured result.
+- Transparent decryption of encrypted documents (empty user password) via the
+  standard security handler: RC4 (V1/V2), AES-128 (V4/AESV2) and AES-256
+  (V5/AESV3, revisions 5 and 6). `Document#encrypted?` reports the state.
 
 ## [0.1.0] - 2026-07-30
 

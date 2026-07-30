@@ -13,10 +13,13 @@ module RUDF
     # for arrays, Hash for dictionaries, {Reference} for +N G R+ and {Stream}
     # for stream objects.
     class Parser
-      def initialize(data, lexer: nil, resolver: nil)
+      def initialize(data, lexer: nil, resolver: nil, decryptor: nil)
         @data = data
         @lexer = lexer || Lexer.new(data)
         @resolver = resolver
+        @decryptor = decryptor
+        @obj_num = nil
+        @obj_gen = nil
       end
 
       attr_reader :lexer
@@ -32,6 +35,10 @@ module RUDF
           raise ParseError, "expected 'N G obj' at offset #{offset}"
         end
 
+        # Remember the object identity so any strings/streams inside it can be
+        # decrypted with the correct per-object key.
+        @obj_num = num.value
+        @obj_gen = gen.value
         parse_object
       end
 
@@ -41,7 +48,9 @@ module RUDF
         case token.type
         when :number
           parse_number_or_reference(token)
-        when :string, :boolean, :null, :name
+        when :string
+          decrypt_string(token.value)
+        when :boolean, :null, :name
           token.value
         when :array_open
           parse_array
@@ -129,7 +138,20 @@ module RUDF
           else
             scan_stream(start)
           end
+        raw = decrypt_stream(raw)
         Stream.new(dict, raw, @resolver)
+      end
+
+      def decrypt_string(value)
+        return value unless @decryptor && @obj_num
+
+        @decryptor.call(value, @obj_num, @obj_gen, :string)
+      end
+
+      def decrypt_stream(raw)
+        return raw unless @decryptor && @obj_num
+
+        @decryptor.call(raw, @obj_num, @obj_gen, :stream)
       end
 
       def resolved_length(value)
