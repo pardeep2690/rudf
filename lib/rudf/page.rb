@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "pdf/content_stream"
+require_relative "pdf/text_page"
 
 module RUDF
   # A single page of a {Document}, mirroring the surface of +fitz.Page+.
@@ -67,16 +67,39 @@ module RUDF
       rect.height
     end
 
-    # Extract text from the page. Only the default +"text"+ mode is currently
-    # supported; other modes raise until richer extraction is implemented.
+    # Extract text from the page, mirroring +fitz.Page.get_text+.
+    #
+    # Supported modes:
+    # * +"text"+   – plain text (default)
+    # * +"words"+  – array of +[x0, y0, x1, y1, word, block, line, word_no]+
+    # * +"blocks"+ – array of +[x0, y0, x1, y1, text, block, type]+
+    # * +"dict"+   – nested Hash of blocks → lines → spans with bounding boxes
     def get_text(option = "text")
-      unless %w[text words].include?(option.to_s)
+      tp = text_page
+      case option.to_s
+      when "text" then tp.text
+      when "words" then tp.words
+      when "blocks" then tp.blocks
+      when "dict", "rawdict" then tp.dict
+      else
         raise ArgumentError, "unsupported text extraction mode: #{option.inspect}"
       end
-
-      PDF::ContentStream.new(contents).text
     end
     alias text get_text
+
+    # The parsed {PDF::TextPage} for this page (structured text with geometry).
+    def text_page
+      @text_page ||= begin
+        mb = mediabox
+        PDF::TextPage.new(
+          contents,
+          resources: @document.pdf.resolve(@dict["Resources"]),
+          resolver: @document.pdf.method(:resolve),
+          page_height: mb.height,
+          page_width: mb.width
+        )
+      end
+    end
 
     # The raw, concatenated (and filter-decoded) content streams of the page.
     def contents

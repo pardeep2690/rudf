@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Font-aware text extraction: `/ToUnicode` CMap decoding, `/Encoding`
+  (WinAnsi/MacRoman) with `/Differences`, and Type0/Identity-H composite
+  fonts.
+- A `PDF::TextPage` engine that interprets the content stream into
+  blocks/lines/spans with bounding boxes.
+- New `Page#get_text` modes: `"words"`, `"blocks"`, and `"dict"`, with
+  coordinates using a top-left origin to match PyMuPDF. `Page#text_page`
+  exposes the structured result.
+
 ## [0.1.0] - 2026-07-30
 
 Initial release: a pure-Ruby port of the PyMuPDF (`fitz`) API.

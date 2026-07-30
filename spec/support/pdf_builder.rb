@@ -22,6 +22,27 @@ module PDFBuilder
     assemble(objects, info)
   end
 
+  # Build a single-page PDF whose font carries a /ToUnicode CMap mapping the
+  # given +code => unicode_hex+ pairs, and whose content shows +codes+ (a raw
+  # byte string). Used to exercise CMap-driven text decoding.
+  def tounicode_page(mapping:, codes:, width: 400, height: 800)
+    bf = mapping.map { |code, hex| "<#{format('%02X', code)}> <#{hex}>" }.join("\n")
+    cmap = "1 begincodespacerange <00> <ff> endcodespacerange\n" \
+           "#{mapping.size} beginbfchar\n#{bf}\nendbfchar\nendcmap"
+    content = "BT /F1 20 Tf 72 700 Td (#{codes.b.gsub('\\') { '\\\\' }.gsub('(', '\\(').gsub(')', '\\)')}) Tj ET"
+
+    objects = []
+    objects << "<< /Type /Catalog /Pages 2 0 R >>"
+    objects << "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"
+    objects << "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 #{width} #{height}] " \
+               "/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>"
+    objects << "<< /Length #{content.bytesize} >>\nstream\n#{content}\nendstream"
+    objects << "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /ToUnicode 6 0 R >>"
+    objects << "<< /Length #{cmap.bytesize} >>\nstream\n#{cmap}\nendstream"
+
+    assemble(objects, "<< /Producer (RUDF) >>")
+  end
+
   # Assemble numbered objects (1-based, in array order) plus an /Info dict into
   # a complete PDF with xref and trailer.
   def assemble(object_bodies, info_body)
